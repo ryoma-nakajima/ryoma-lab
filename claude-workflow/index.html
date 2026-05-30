@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code × Codex 並列実装ワークフロー — 僕の設定を無料公開 | RYOMA LAB</title>
+<meta name="description" content="最近 Claude Code に入った Workflow 機能で、実装は Codex に並列ファンアウト・Opus が司令塔という設定を組んでいます。その設定一式（codex-impl.js + CLAUDE.md の仕込み方）を丸ごと無料公開します。">
+<meta property="og:title" content="Claude Code × Codex 並列実装ワークフロー — 僕の設定を無料公開">
+<meta property="og:description" content="実装は Codex に並列ファンアウト、Opus が依存順制御・ビルド緑ゲート・commit 判断。設定一式を丸ごと公開。">
+<meta property="og:type" content="article">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0c0d10;
+  --bg-card: #15171c;
+  --bg-card-hover: #1c1f26;
+  --border: #262a33;
+  --border-hover: #3a3f4b;
+  --fg: #e8eaed;
+  --fg-dim: #9aa0ab;
+  --fg-faint: #5c6370;
+  --accent: #6ee7b7;
+  --accent-dim: #2dd4bf;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Noto Sans JP", sans-serif;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; width: 100%; }
+
+/* Back nav */
+.topnav { padding: 28px 0 0; }
+.topnav a {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.topnav a:hover { color: var(--accent); }
+
+/* Header */
+header { padding: 48px 0 40px; border-bottom: 1px solid var(--border); }
+.eyebrow {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+h1 {
+  font-size: clamp(28px, 5.5vw, 44px);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.lead {
+  margin-top: 20px;
+  color: var(--fg-dim);
+  font-size: 16px;
+}
+.meta-row {
+  margin-top: 22px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--fg-faint);
+  display: flex; gap: 16px; flex-wrap: wrap;
+}
+
+/* Article */
+article { padding: 8px 0 40px; }
+article h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 48px 0 16px;
+  scroll-margin-top: 24px;
+}
+article h2 .num {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 14px;
+  color: var(--accent);
+  margin-right: 10px;
+}
+article h3 { font-size: 17px; font-weight: 700; margin: 28px 0 10px; }
+article p { margin: 14px 0; color: var(--fg); }
+article p.dim { color: var(--fg-dim); }
+article ul, article ol { margin: 14px 0 14px 4px; padding-left: 22px; color: var(--fg); }
+article li { margin: 7px 0; }
+article a { color: var(--accent-dim); text-decoration: none; border-bottom: 1px solid transparent; }
+article a:hover { border-bottom-color: var(--accent-dim); }
+article strong { color: #fff; font-weight: 700; }
+code.inline {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.86em;
+  background: #1f2129;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 6px;
+  color: var(--accent);
+}
+
+/* Callout */
+.callout {
+  margin: 22px 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+.callout .tag {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.callout p { margin: 8px 0 0; color: var(--fg-dim); font-size: 14.5px; }
+
+/* Flow diagram */
+.flow {
+  margin: 24px 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px 20px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  color: var(--fg-dim);
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.7;
+}
+.flow b { color: var(--accent); font-weight: 700; }
+
+/* Code block */
+.codewrap { margin: 20px 0; }
+.codehead {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #11131a;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  padding: 10px 14px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--fg-faint);
+}
+.copybtn {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  background: transparent;
+  border: 1px solid var(--border-hover);
+  color: var(--fg-dim);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.copybtn:hover { color: var(--accent); border-color: var(--accent-dim); }
+.copybtn.done { color: var(--accent); border-color: var(--accent); }
+pre.code {
+  margin: 0;
+  background: #0e0f14;
+  border: 1px solid var(--border);
+  border-radius: 0 0 10px 10px;
+  padding: 18px;
+  overflow-x: auto;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #cdd2db;
+  tab-size: 2;
+}
+
+/* Footer */
+footer {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding: 28px 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--fg-faint);
+}
+footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+footer a { color: var(--fg-dim); text-decoration: none; }
+footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="wrap"><a href="../">← RYOMA LAB</a></div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">WORKFLOW / Claude Code</div>
+    <h1>実装は Codex に丸投げ、<br>Opus は司令塔。<br>その設定を無料公開します。</h1>
+    <p class="lead">最近 Claude Code に入った <strong>Workflow</strong> 機能で、「実装の手は Codex に並列ファンアウト・Opus は依存順とビルド緑ゲートと commit 判断だけ握る」というハイブリッド体制を標準化しています。使っている設定一式を、丸ごと置いておきます。コピペして自分の <code class="inline">.claude/</code> に入れれば動きます。</p>
+    <div class="meta-row">
+      <span>by RYOMA</span>
+      <span>Claude Code + Codex CLI</span>
+      <span>MIT 相当・自由に使ってOK</span>
+    </div>
+  </div>
+</header>
+
+<article>
+<div class="wrap">
+
+  <h2><span class="num">01</span>なにこれ</h2>
+  <p>Claude Code の <strong>Workflow</strong> は、複数のサブエージェントを「決め打ちの制御フロー（ループ・並列・フェーズ）」で動かす仕組みです。モデル任せのふわっとした委譲ではなく、<strong>誰が何を並列でやって、どこで待ち合わせて、どこで commit するか</strong>をスクリプトで固定できます。</p>
+  <p>僕はこれを使って、こういう役割分担にしています。</p>
+  <ul>
+    <li><strong>Codex（gpt-5.5 / 1M context）</strong> — 実コーディング担当。タスクを並列でファンアウトしてゴリゴリ書く手。</li>
+    <li><strong>Opus（Workflow 本体）</strong> — 司令塔。フェーズの依存順を制御し、各リポで <code class="inline">typecheck / build</code> が緑になったかをゲートし、緑になったタスクだけ commit させる。</li>
+  </ul>
+  <p>「速い手」と「壊さない判断」を分けるのが狙いです。Codex に量を書かせ、Opus がビルドを緑に保つ番人をやる。</p>
+
+  <h2><span class="num">02</span>仕組みは2層ある</h2>
+  <p>大事なのはここ。<strong>ワークフローのファイルを置くだけでは使われません。</strong> Claude に「実装のときはこれ使え」と教える層が要る。だから2層に分かれています。</p>
+
+  <div class="flow"><b>① Workflow 本体</b>  .claude/workflows/codex-impl.js
+      └ Codex に並列ファンアウト / Opus がゲート＆commit する処理そのもの
+
+<b>② CLAUDE.md の一文</b>  「並列実装は codex-impl を使え」
+      └ Claude Code が <b>cwd から親階層まで自動で積み重ね読み</b>するので
+        作業ディレクトリに入った瞬間、この指示がコンテキストに乗る
+        → Claude が勝手に「あ、実装は codex-impl ね」と分かる</div>
+
+  <div class="callout">
+    <span class="tag">これが肝</span>
+    <p>Workflow ファイルは「能力」、CLAUDE.md の一文は「いつそれを使うかの指示」。CLAUDE.md は Claude Code が起動時に <code class="inline">cwd</code> から上位階層へ向かって自動でロードして積み重ねる。だから親階層の CLAUDE.md に書いておけば、配下のどのリポで作業しても自動でコンテキストに入る。<strong>「設定をコンテキストに入れる」= CLAUDE.md に書く</strong>、これだけ。</p>
+  </div>
+
+  <h2><span class="num">03</span>設定その1 — CLAUDE.md に書く一文</h2>
+  <p>プロジェクト（または親階層）の <code class="inline">CLAUDE.md</code> にこれを足すだけ。これで Claude は「実装をファンアウトするときは保存ワークフロー <code class="inline">codex-impl</code> を呼ぶ」と理解します。</p>
+  <div class="codewrap">
+    <div class="codehead"><span>CLAUDE.md（抜粋）</span><button class="copybtn" data-src="src-claudemd">COPY</button></div>
+    <pre class="code" id="out-claudemd"></pre>
+  </div>
+
+  <h2><span class="num">04</span>設定その2 — codex-impl.js 本体</h2>
+  <p><code class="inline">.claude/workflows/codex-impl.js</code> として保存。<code class="inline">args.phases</code> にタスクを渡すと、フェーズ内は並列・フェーズ間は直列で Codex に投げ、各タスクが緑になったら commit します。<strong>同一リポを同フェーズで2タスクに割らない</strong>（git index が競合する）のだけ注意。</p>
+  <div class="codewrap">
+    <div class="codehead"><span>.claude/workflows/codex-impl.js</span><button class="copybtn" data-src="src-codex">COPY</button></div>
+    <pre class="code" id="out-codex"></pre>
+  </div>
+
+  <h2><span class="num">05</span>使い方</h2>
+  <ol>
+    <li>上の2ファイルを <code class="inline">.claude/workflows/codex-impl.js</code> と <code class="inline">CLAUDE.md</code> に配置。</li>
+    <li>Codex CLI を入れ、<code class="inline">~/.codex/config.toml</code> でモデル（gpt-5.5 / 推論 high / 大きめ context）を設定しておく。</li>
+    <li>あとは Claude Code に普通に「この機能を実装して」と頼むだけ。CLAUDE.md の一文を読んだ Claude が、自分で <code class="inline">codex-impl</code> にタスクを分解して並列実装させ、ビルド緑を確認して commit まで進めます。</li>
+  </ol>
+  <p class="dim">明示的に呼びたいときは <code class="inline">Workflow name=codex-impl args={phases:[{title, tasks:[{label, repo, prompt}]}]}</code>。</p>
+
+  <div class="callout">
+    <span class="tag">前提</span>
+    <p>Claude Code（Workflow 対応版）+ Codex CLI が手元に入っていること。<code class="inline">agentType: 'codex:codex-rescue'</code> は Codex を呼ぶためのエージェント種別なので、自分の環境の Codex 連携プラグイン名に合わせて読み替えてください。push はしない設計（最終判断は人間に残す）です。</p>
+  </div>
+
+</div>
+</article>
+
+<footer>
+  <div class="wrap">
+    <span>RYOMA LAB</span>
+    <span><a href="../">← ハブに戻る</a></span>
+  </div>
+</footer>
+
+<!-- ソースを text/plain で持ち、JS で <pre> に流し込む（HTMLエスケープ不要・コピーも同一ソースから） -->
+<script type="text/plain" id="src-claudemd">## 標準ワークフロー
+
+- **並列実装は Codex で**: 実装タスクのファンアウトは保存ワークフロー
+  `.claude/workflows/codex-impl.js` を使う
+  （`Workflow name=codex-impl args={phases:[{title,tasks:[{label,repo,prompt}]}]}`）。
+  Codex がコーディング、Opus が依存順制御・ビルド緑ゲート・commit 判断を担うハイブリッド。
+</script>
+
+<script type="text/plain" id="src-codex">// 標準ワークフロー: Codex(gpt-5.5) 並列実装ハーネス
+// ------------------------------------------------------------------
+// 目的: 実装(コーディング)を Codex CLI(gpt-5.5 / xhigh / 1M ctx, ~/.codex/config.toml)へ
+//       ファンアウトし、Opus(このワークフロー本体)が依存順の制御・ビルド緑ゲート・
+//       commit 判断を握る「ハイブリッド」標準テンプレ。
+//
+// 使い方:
+//   Workflow({ name: 'codex-impl', args: {
+//     commitWhenGreen: true,            // 省略時 true。緑になった単位で各エージェントが commit
+//     phases: [
+//       { title: 'P1 独立', tasks: [    // フェーズ内 tasks は並列、フェーズ間は直列(依存順)
+//         { label: 'sdk:xxx', repo: '/abs/path/akari-sdk', prompt: '...実装指示...' },
+//         { label: 'shell:yyy', repo: '/abs/path/akari-shell', prompt: '...' },
+//       ]},
+//       { title: 'P2 依存', tasks: [ { label: '...', prompt: '...' } ] },
+//     ],
+//   }})
+//   （scriptPath 直指定でも可: Workflow({ scriptPath: '<このファイル>', args: {...} })）
+//
+// 設計メモ:
+//   - 各 task は agentType 'codex:codex-rescue' で起動 = 実コーディングを Codex(5.5)が担当。
+//   - Codex は共有ランタイム経由のため、並列でも多少シリアル化しうる(品質優先で許容)。
+//   - 同一リポを同フェーズで2エージェントに割らないこと(git index 競合)。1リポ=1タスク/フェーズ。
+//   - push はしない(呼び出し元の判断)。検証は各リポの typecheck/build(+test)必須。
+
+export const meta = {
+  name: 'codex-impl',
+  description: 'Codex(gpt-5.5)で実装を並列実行する標準ハーネス（Opusが依存順制御+ビルド緑ゲート+commit判断）',
+  phases: [
+    { title: 'Codex実装', detail: 'args.phases を順に、各タスクを Codex(5.5) へ並列ファンアウト' },
+  ],
+}
+
+const RESULT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['track', 'status', 'committed', 'files_changed', 'verification', 'notes'],
+  properties: {
+    track: { type: 'string' },
+    status: { type: 'string', enum: ['done-verified', 'partial', 'failed', 'skipped'] },
+    committed: { type: 'array', items: { type: 'string' }, description: 'commit した repo:hash（未commitなら空）' },
+    files_changed: { type: 'array', items: { type: 'string' } },
+    verification: { type: 'string', description: '実行コマンド + 結果(pass/fail)' },
+    notes: { type: 'string', description: '判断・残課題・壊さないために留めた点(日本語)' },
+  },
+}
+
+const commitRule = (commitWhenGreen) => `
+# 共通規約（厳守）
+- 実コーディングは Codex(gpt-5.5) で行う。最小変更・既存スタイル踏襲・public API を不用意に壊さない。
+- 識別子=英語 / コメント=日本語。コミット文面=日本語、先頭に [機能追加]/[バグ修正]/[リファクタ]/[ドキュメント]。
+- 検証必須: 対象リポの package.json / Cargo.toml の script を見て typecheck + build(+test) を実行し、
+  verification に実コマンドと結果(pass/fail)を書く。コンパイル/型エラーは直し切る。
+${commitWhenGreen ? `- **検証が緑になったら、変更ファイルを明示 git add して即 commit**（並行セッションの git add -A 巻き込み防止）。
+  末尾に必ず: Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>` : '- commit はしない（変更は working tree に残す）。'}
+- 緑にできない/壊れる場合は commit せず、変更を最小に留め status=failed か partial で正直に報告（壊れた状態を残さない）。
+- push はしない。
+`
+
+// args は JSON オブジェクト想定だが、呼び出し経路によっては文字列で届くことがあるため吸収する
+let cfg = args
+if (typeof cfg === 'string') {
+  try { cfg = JSON.parse(cfg) } catch (_e) { cfg = {} }
+}
+cfg = cfg || {}
+const phasesIn = Array.isArray(cfg.phases) ? cfg.phases : []
+const commitWhenGreen = cfg.commitWhenGreen !== false
+const RULE = commitRule(commitWhenGreen)
+
+if (phasesIn.length === 0) {
+  log('codex-impl: args.phases が空です。{ phases: [{ title, tasks: [{label, repo, prompt}] }] } を渡してください。')
+  return { error: 'no phases', hint: 'args.phases に [{title, tasks:[{label,repo,prompt}]}] を渡す' }
+}
+
+const out = []
+for (const ph of phasesIn) {
+  const title = ph.title || 'Codex実装'
+  const tasks = Array.isArray(ph.tasks) ? ph.tasks : []
+  phase(title)
+  if (tasks.length === 0) {
+    log(`[${title}] tasks が空 — skip`)
+    continue
+  }
+  const results = await parallel(
+    tasks.map((t) => () =>
+      agent(
+        `${RULE}\n\n# タスク: ${t.label || '(無名)'}\n${t.repo ? `対象リポ: ${t.repo}\n` : ''}\n${t.prompt || ''}`,
+        {
+          label: t.label || 'codex-task',
+          phase: title,
+          schema: RESULT_SCHEMA,
+          agentType: 'codex:codex-rescue',
+        },
+      ),
+    ),
+  )
+  const valid = results.filter(Boolean)
+  out.push({ phase: title, results: valid })
+  log(`[${title}] 完了: ${valid.map((r) => `${r.track || '?'}=${r.status}`).join(' / ') || '(結果なし)'}`)
+}
+
+return out
+</script>
+
+<script>
+// text/plain ソースを <pre> に流し込み + コピー
+function render(srcId, outId) {
+  var src = document.getElementById(srcId).textContent.replace(/^\n/, '').replace(/\s+$/, '');
+  document.getElementById(outId).textContent = src;
+  return src;
+}
+render('src-claudemd', 'out-claudemd');
+render('src-codex', 'out-codex');
+
+document.querySelectorAll('.copybtn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var src = document.getElementById(btn.dataset.src).textContent.replace(/^\n/, '').replace(/\s+$/, '');
+    navigator.clipboard.writeText(src).then(function () {
+      var prev = btn.textContent;
+      btn.textContent = 'COPIED';
+      btn.classList.add('done');
+      setTimeout(function () { btn.textContent = prev; btn.classList.remove('done'); }, 1400);
+    });
+  });
+});
+</script>
+</body>
+</html>
