@@ -506,22 +506,22 @@ window.addEventListener('keydown',(e)=>{
 const galGridEl=document.getElementById('galGrid'), galSearchEl=document.getElementById('galSearch'), galCountEl=document.getElementById('galCount'), galWrapEl=document.getElementById('galWrap');
 
 // サムネ専用の WebGL レンダラー（詳細用とは別コンテキスト。preserveDrawingBuffer で drawImage を安定化）
-const TW=240, TH=135;
+const TW=160, TH=90;
 const galCanvas=document.createElement('canvas'); galCanvas.width=TW; galCanvas.height=TH;
 const glG=galCanvas.getContext('webgl',{preserveDrawingBuffer:true,premultipliedAlpha:false})||galCanvas.getContext('experimental-webgl')||null;
 const gAcv=document.createElement('canvas'), gBcv=document.createElement('canvas'); gAcv.width=gBcv.width=SW; gAcv.height=gBcv.height=SH;
 const gax=gAcv.getContext('2d'), gbx=gBcv.getContext('2d');
-let quadG=null, gTexA=null, gTexB=null; const progCacheG={};
+let quadG=null; const progCacheG={};
 function compG(type,src){ const s=glG.createShader(type); glG.shaderSource(s,src); glG.compileShader(s); if(!glG.getShaderParameter(s,glG.COMPILE_STATUS)){ const l=glG.getShaderInfoLog(s); glG.deleteShader(s); throw new Error(l);} return s; }
 function programG(fsrc){ const p=glG.createProgram(); glG.attachShader(p,compG(glG.VERTEX_SHADER,VERT)); glG.attachShader(p,compG(glG.FRAGMENT_SHADER,fsrc)); glG.linkProgram(p); if(!glG.getProgramParameter(p,glG.LINK_STATUS)) throw new Error(glG.getProgramInfoLog(p)); return p; }
 function makeTexG(){ const t=glG.createTexture(); glG.bindTexture(glG.TEXTURE_2D,t); glG.texParameteri(glG.TEXTURE_2D,glG.TEXTURE_WRAP_S,glG.CLAMP_TO_EDGE); glG.texParameteri(glG.TEXTURE_2D,glG.TEXTURE_WRAP_T,glG.CLAMP_TO_EDGE); glG.texParameteri(glG.TEXTURE_2D,glG.TEXTURE_MIN_FILTER,glG.LINEAR); glG.texParameteri(glG.TEXTURE_2D,glG.TEXTURE_MAG_FILTER,glG.LINEAR); return t; }
-if(glG){ quadG=glG.createBuffer(); glG.bindBuffer(glG.ARRAY_BUFFER,quadG); glG.bufferData(glG.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),glG.STATIC_DRAW); gTexA=makeTexG(); gTexB=makeTexG(); }
+if(glG){ quadG=glG.createBuffer(); glG.bindBuffer(glG.ARRAY_BUFFER,quadG); glG.bufferData(glG.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),glG.STATIC_DRAW); }
 function getProgG(fx){ if(progCacheG[fx.id]) return progCacheG[fx.id]; let e; try{ e={prog:programG(buildFrag(fx)),err:null}; }catch(err){ e={prog:null,err:String(err.message||err)}; } progCacheG[fx.id]=e; return e; }
 
 let tiles=[];
 const visObserver=('IntersectionObserver' in window) ? new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.target.__tile) en.target.__tile.visible=en.isIntersecting; }); },{root:galWrapEl,rootMargin:'150px'}) : null;
 
-function buildGallery(q){ q=(q||'').trim().toLowerCase(); if(visObserver) tiles.forEach(t=>visObserver.unobserve(t.el)); tiles=[]; galGridEl.innerHTML=''; let shown=0;
+function buildGallery(q){ q=(q||'').trim().toLowerCase(); if(visObserver) tiles.forEach(t=>visObserver.unobserve(t.el)); tiles=[]; bakedOrder=[]; galGridEl.innerHTML=''; let shown=0;
   SYSTEMS.forEach((sysName,si)=>{ const items=EFFECTS.filter(f=>f.system===si+1 && (!q || (f.name+' '+f.en+' '+(f.desc||'')+' '+(f.sub||'')).toLowerCase().includes(q)));
     if(!items.length) return;
     const sec=document.createElement('div'); sec.className='gal-sys';
@@ -542,38 +542,55 @@ function buildGallery(q){ q=(q||'').trim().toLowerCase(); if(visObserver) tiles.
   galCountEl.textContent=shown+' / '+EFFECTS.length+' 種';
 }
 
-let galTime=0, galLast=null, galRR=0;
-function upG(tex,cv){ glG.bindTexture(glG.TEXTURE_2D,tex); glG.pixelStorei(glG.UNPACK_FLIP_Y_WEBGL,true); glG.texImage2D(glG.TEXTURE_2D,0,glG.RGBA,glG.RGBA,glG.UNSIGNED_BYTE,cv); }
+// 各エフェクトを「24フレームの短いループ動画(スプライトシート)」として1度だけベイクし、
+// 以降はキャッシュした絵を貼るだけ(2D blit)で再生 → ライブシェーダー描画を毎フレーム回さない
+const NFRAMES=24, LOOP_T=2.4, MAX_BAKED=110, BAKE_PER_FRAME=2;
+let galTime=0, galLast=null, bakedOrder=[];
+const srcTexA=[], srcTexB=[];
+function upGtex(tex,cv){ glG.bindTexture(glG.TEXTURE_2D,tex); glG.pixelStorei(glG.UNPACK_FLIP_Y_WEBGL,true); glG.texImage2D(glG.TEXTURE_2D,0,glG.RGBA,glG.RGBA,glG.UNSIGNED_BYTE,cv); }
 function bindTexG(p,name,tex,unit){ const l=glG.getUniformLocation(p,name); if(l==null)return; glG.activeTexture(glG.TEXTURE0+unit); glG.bindTexture(glG.TEXTURE_2D,tex); glG.uniform1i(l,unit); }
 function ufG(p,name,cb){ const l=glG.getUniformLocation(p,name); if(l!=null) cb(l); }
-function renderTile(t,prog){ const fx=t.fx;
-  glG.viewport(0,0,TW,TH); glG.useProgram(prog);
+// 24フレーム分のソース映像(A=synthwave / B=geo)を1度だけテクスチャ化し、全ベイクで共有
+function prebakeSources(){ for(let i=0;i<NFRAMES;i++){ const t=(i/NFRAMES)*LOOP_T;
+  GENERATORS.synthwave.fn(gax,t,SW,SH); const ta=makeTexG(); upGtex(ta,gAcv); srcTexA.push(ta);
+  GENERATORS.geo.fn(gbx,t,SW,SH); const tb=makeTexG(); upGtex(tb,gBcv); srcTexB.push(tb);
+} }
+// 1エフェクトを24フレーム焼いてスプライトシート(横連結)に格納
+function bakeTile(t){ const fx=t.fx; const e=getProgG(fx);
+  t.sprite=document.createElement('canvas'); t.sprite.width=TW*NFRAMES; t.sprite.height=TH; t.sctx=t.sprite.getContext('2d');
+  if(!e.prog){ t.sctx.fillStyle='#231016'; t.sctx.fillRect(0,0,TW*NFRAMES,TH); t.baked=true; t.lastIdx=-1; bakedOrder.push(t); return; }
+  const prog=e.prog; glG.viewport(0,0,TW,TH); glG.useProgram(prog);
   const loc=glG.getAttribLocation(prog,'a_pos'); glG.bindBuffer(glG.ARRAY_BUFFER,quadG); glG.enableVertexAttribArray(loc); glG.vertexAttribPointer(loc,2,glG.FLOAT,false,0,0);
-  bindTexG(prog,'u_tex',gTexA,0); bindTexG(prog,'u_texB',gTexB,1); bindTexG(prog,'u_prev',gTexA,2);
   ufG(prog,'u_res',l=>glG.uniform2f(l,TW,TH));
-  ufG(prog,'u_time',l=>glG.uniform1f(l,galTime));
-  const p01 = fx.kind==='transition' ? Math.min(1,((galTime/3.0)%1)*1.35) : ((galTime*0.12)%1);
-  ufG(prog,'u_progress',l=>glG.uniform1f(l,p01));
   ufG(prog,'u_intensity',l=>glG.uniform1f(l,1));
   (fx.params||[]).forEach(pr=>ufG(prog,pr.key,l=>glG.uniform1f(l,pr.default)));
-  glG.drawArrays(glG.TRIANGLES,0,3);
-  t.ctx.drawImage(galCanvas,0,0,TW,TH);
+  for(let i=0;i<NFRAMES;i++){ const tt=(i/NFRAMES)*LOOP_T;
+    bindTexG(prog,'u_tex',srcTexA[i],0); bindTexG(prog,'u_texB',srcTexB[i],1); bindTexG(prog,'u_prev',srcTexA[i],2);
+    ufG(prog,'u_time',l=>glG.uniform1f(l,tt));
+    const p01 = fx.kind==='transition' ? (i/(NFRAMES-1)) : ((tt*0.12)%1);
+    ufG(prog,'u_progress',l=>glG.uniform1f(l,p01));
+    glG.drawArrays(glG.TRIANGLES,0,3);
+    t.sctx.drawImage(galCanvas,i*TW,0);
+  }
+  t.baked=true; t.lastIdx=-1; bakedOrder.push(t);
+  // メモリ上限超過：画面外の最古ベイクを破棄(LRU)
+  let guard=0;
+  while(bakedOrder.length>MAX_BAKED && guard++<bakedOrder.length){ const old=bakedOrder.shift();
+    if(old.visible){ bakedOrder.push(old); continue; }
+    old.baked=false; old.sprite=null; old.sctx=null; old.lastIdx=-1; old.ctx.fillStyle='#06070a'; old.ctx.fillRect(0,0,TW,TH);
+  }
 }
 function galFrame(ts){
   requestAnimationFrame(galFrame);
   if(mode!=='gallery'||!glG){ galLast=ts; return; }
   if(galLast==null) galLast=ts; const dt=Math.min((ts-galLast)/1000,0.05); galLast=ts; galTime+=dt;
-  GENERATORS.synthwave.fn(gax,galTime,SW,SH); upG(gTexA,gAcv);
-  GENERATORS.geo.fn(gbx,galTime,SW,SH); upG(gTexB,gBcv);
   const vis=tiles.filter(t=>t.visible); if(!vis.length) return;
-  const drawBudget=Math.min(vis.length,44); let compiles=0; const compileMax=6;
-  for(let k=0;k<drawBudget;k++){ const t=vis[(galRR+k)%vis.length];
-    let e=progCacheG[t.fx.id];
-    if(!e){ if(compiles>=compileMax) continue; compiles++; e=getProgG(t.fx); }
-    if(!e.prog){ t.ctx.drawImage(gAcv,0,0,TW,TH); continue; }
-    renderTile(t,e.prog);
-  }
-  galRR=(galRR+drawBudget)%Math.max(vis.length,1);
+  // (1) 未ベイクの可視タイルを毎フレーム少しずつ焼く（焼き終えれば以後シェーダー描画ゼロ）
+  let baked=0;
+  for(let k=0;k<vis.length && baked<BAKE_PER_FRAME;k++){ if(!vis[k].baked){ bakeTile(vis[k]); baked++; } }
+  // (2) ベイク済みは該当フレームを貼るだけ。フレーム番号が変わった時のみ blit（約10fps再生）
+  const idx=Math.floor((galTime/LOOP_T)*NFRAMES)%NFRAMES;
+  for(const t of vis){ if(t.baked && t.sprite && t.lastIdx!==idx){ t.ctx.drawImage(t.sprite, idx*TW,0,TW,TH, 0,0,TW,TH); t.lastIdx=idx; } }
 }
 galSearchEl.addEventListener('input',()=>buildGallery(galSearchEl.value));
 
@@ -592,6 +609,7 @@ renderList('');
 buildGallery('');
 resize();
 if(EFFECTS.length){ select(EFFECTS[0].id); }
+if(glG) prebakeSources();
 setMode('gallery');
 requestAnimationFrame(frame);
 requestAnimationFrame(galFrame);
