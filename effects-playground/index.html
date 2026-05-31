@@ -104,12 +104,36 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:5px}
 ::-webkit-scrollbar-thumb:hover{background:var(--border-hover)}
 
+/* gallery (一覧) */
+.app.hidden,.gallery.hidden{display:none}
+.gallery{flex:1;display:flex;flex-direction:column;min-height:0}
+.gal-top{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+#galSearch{flex:0 1 360px;background:var(--bg-card);border:1px solid var(--border);border-radius:9px;color:var(--fg);font-size:14px;padding:9px 12px;font-family:inherit;outline:none;transition:border-color .15s}
+#galSearch:focus{border-color:var(--accent)}
+.gal-count{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--fg-dim);white-space:nowrap}
+.gal-hint{margin-left:auto;font-size:12px;color:var(--fg-faint)}
+.gal-wrap{overflow-y:auto;flex:1;padding:14px 20px 70px}
+.gal-sys{margin-bottom:26px}
+.gal-sys-label{display:flex;align-items:center;gap:8px;padding:6px 2px 10px;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--fg-faint);text-transform:uppercase;position:sticky;top:0;background:var(--bg);z-index:2}
+.gal-sys-label .dot{width:9px;height:9px;border-radius:50%}
+.gal-sys-label .c{margin-left:auto;font-family:"JetBrains Mono",monospace}
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.tile{cursor:pointer;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg-card);transition:border-color .15s ease,transform .15s ease}
+.tile:hover{border-color:var(--accent);transform:translateY(-2px)}
+.tile canvas{width:100%;aspect-ratio:16/9;display:block;background:#06070a}
+.tile .tl{padding:7px 9px}
+.tile .tl .nm{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .tl .en{font-size:10px;color:var(--fg-faint);font-family:"JetBrains Mono",monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .badge{font-size:8px;color:var(--fg-faint);border:1px solid var(--border);border-radius:4px;padding:0 3px;margin-left:5px;vertical-align:1px}
+#viewToggle{flex-shrink:0}
+
 @media(max-width:1024px){
   .app{grid-template-columns:1fr;grid-template-rows:auto auto auto;overflow-y:auto;height:auto}
   body{overflow:auto;height:auto}
   .sidebar{border-right:none;border-bottom:1px solid var(--border);max-height:38vh}
   .params{border-left:none;border-top:1px solid var(--border)}
   .canvas-wrap{min-height:46vh}
+  .gallery{min-height:80vh}
 }
 </style>
 </head>
@@ -118,7 +142,18 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 <div class="topbar">
   <span class="brand"><a href="../">RYOMA LAB</a> / TOOL-03</span>
   <h1>エフェクト・プレイグラウンド</h1>
+  <button class="btn sm" id="viewToggle" title="一覧 / エディタ 切替（Esc で一覧に戻る）">◧ エディタ</button>
   <span class="meta"><span id="fxCount"></span> 種 · WebGL 実装 · <a href="../video-effects/">図鑑 →</a> · <a href="https://github.com/ryoma-nakajima/ryoma-lab/blob/main/effects-playground/index.html" target="_blank" rel="noopener">GitHub ↗</a></span>
+</div>
+
+<!-- gallery (一覧プレビュー) -->
+<div class="gallery" id="gallery">
+  <div class="gal-top">
+    <input id="galSearch" type="search" placeholder="検索… 例: グリッチ, ワイプ, ボケ, VHS" autocomplete="off">
+    <span class="gal-count" id="galCount"></span>
+    <span class="gal-hint">タイルを押すと詳細エディタが開きます（スライダー調整）</span>
+  </div>
+  <div class="gal-wrap" id="galWrap"><div id="galGrid"></div></div>
 </div>
 
 <div class="app">
@@ -297,6 +332,7 @@ let current=null;            // selected effect
 let progCache={};            // id -> {prog, err, locs}
 let paramVals={};            // key -> value (for current)
 let playing=true, simTime=0, lastT=null, speed=1, scrub=0, manualScrub=false, beforeHeld=false, masterIntensity=1, clearFeedback=false;
+let mode='gallery';  // 'gallery' | 'detail'
 
 function getProgram(fx){ if(progCache[fx.id]) return progCache[fx.id];
   let entry; try{ const prog=program(VERT, buildFrag(fx)); entry={prog,err:null}; }catch(e){ entry={prog:null,err:String(e.message||e)}; }
@@ -308,6 +344,7 @@ function resize(){ const wrap=document.getElementById('canvasWrap'); const W=wra
 window.addEventListener('resize',resize);
 
 function frame(ts){
+  if(mode!=='detail'){ requestAnimationFrame(frame); lastT=null; return; }
   if(lastT==null) lastT=ts; const dt=Math.min((ts-lastT)/1000,0.05); lastT=ts;
   if(playing) simTime+=dt*speed;
   // progress for transitions: loop 0->1 with brief hold, or manual scrub
@@ -457,17 +494,107 @@ searchEl.addEventListener('input',()=>renderList(searchEl.value));
 document.getElementById('prevBtn').addEventListener('click',()=>stepFx(-1));
 document.getElementById('nextBtn').addEventListener('click',()=>stepFx(1));
 window.addEventListener('keydown',(e)=>{
-  if(e.target===searchEl) return;                 // 検索入力中は無視
+  if(e.key==='Escape'){ if(mode==='detail'){ e.preventDefault(); setMode('gallery'); } return; }
+  if(e.target===searchEl || e.target===galSearchEl) return;   // 検索入力中は無視
+  if(mode!=='detail') return;
   if(e.key==='ArrowUp'||e.key==='k'){ e.preventDefault(); stepFx(-1); }
   else if(e.key==='ArrowDown'||e.key==='j'){ e.preventDefault(); stepFx(1); }
   else if(e.key===' '){ e.preventDefault(); playBtn.click(); }
 });
 
+/* ===================== ギャラリー（全エフェクト一覧プレビュー） ===================== */
+const galGridEl=document.getElementById('galGrid'), galSearchEl=document.getElementById('galSearch'), galCountEl=document.getElementById('galCount'), galWrapEl=document.getElementById('galWrap');
+
+// サムネ専用の WebGL レンダラー（詳細用とは別コンテキスト。preserveDrawingBuffer で drawImage を安定化）
+const TW=240, TH=135;
+const galCanvas=document.createElement('canvas'); galCanvas.width=TW; galCanvas.height=TH;
+const glG=galCanvas.getContext('webgl',{preserveDrawingBuffer:true,premultipliedAlpha:false})||galCanvas.getContext('experimental-webgl')||null;
+const gAcv=document.createElement('canvas'), gBcv=document.createElement('canvas'); gAcv.width=gBcv.width=SW; gAcv.height=gBcv.height=SH;
+const gax=gAcv.getContext('2d'), gbx=gBcv.getContext('2d');
+let quadG=null, gTexA=null, gTexB=null; const progCacheG={};
+function compG(type,src){ const s=glG.createShader(type); glG.shaderSource(s,src); glG.compileShader(s); if(!glG.getShaderParameter(s,glG.COMPILE_STATUS)){ const l=glG.getShaderInfoLog(s); glG.deleteShader(s); throw new Error(l);} return s; }
+function programG(fsrc){ const p=glG.createProgram(); glG.attachShader(p,compG(glG.VERTEX_SHADER,VERT)); glG.attachShader(p,compG(glG.FRAGMENT_SHADER,fsrc)); glG.linkProgram(p); if(!glG.getProgramParameter(p,glG.LINK_STATUS)) throw new Error(glG.getProgramInfoLog(p)); return p; }
+function makeTexG(){ const t=glG.createTexture(); glG.bindTexture(glG.TEXTURE_2D,t); glG.texParameteri(glG.TEXTURE_2D,glG.TEXTURE_WRAP_S,glG.CLAMP_TO_EDGE); glG.texParameteri(glG.TEXTURE_2D,glG.TEXTURE_WRAP_T,glG.CLAMP_TO_EDGE); glG.texParameteri(glG.TEXTURE_2D,glG.TEXTURE_MIN_FILTER,glG.LINEAR); glG.texParameteri(glG.TEXTURE_2D,glG.TEXTURE_MAG_FILTER,glG.LINEAR); return t; }
+if(glG){ quadG=glG.createBuffer(); glG.bindBuffer(glG.ARRAY_BUFFER,quadG); glG.bufferData(glG.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),glG.STATIC_DRAW); gTexA=makeTexG(); gTexB=makeTexG(); }
+function getProgG(fx){ if(progCacheG[fx.id]) return progCacheG[fx.id]; let e; try{ e={prog:programG(buildFrag(fx)),err:null}; }catch(err){ e={prog:null,err:String(err.message||err)}; } progCacheG[fx.id]=e; return e; }
+
+let tiles=[];
+const visObserver=('IntersectionObserver' in window) ? new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.target.__tile) en.target.__tile.visible=en.isIntersecting; }); },{root:galWrapEl,rootMargin:'150px'}) : null;
+
+function buildGallery(q){ q=(q||'').trim().toLowerCase(); if(visObserver) tiles.forEach(t=>visObserver.unobserve(t.el)); tiles=[]; galGridEl.innerHTML=''; let shown=0;
+  SYSTEMS.forEach((sysName,si)=>{ const items=EFFECTS.filter(f=>f.system===si+1 && (!q || (f.name+' '+f.en+' '+(f.desc||'')+' '+(f.sub||'')).toLowerCase().includes(q)));
+    if(!items.length) return;
+    const sec=document.createElement('div'); sec.className='gal-sys';
+    const lab=document.createElement('div'); lab.className='gal-sys-label'; lab.innerHTML='<span class="dot" style="background:'+SYS_COLORS[si]+'"></span>'+sysName+'<span class="c">'+items.length+'</span>'; sec.appendChild(lab);
+    const grid=document.createElement('div'); grid.className='gal-grid';
+    items.forEach(f=>{ shown++; const el=document.createElement('div'); el.className='tile';
+      const cv=document.createElement('canvas'); cv.width=TW; cv.height=TH; const ctx=cv.getContext('2d');
+      ctx.fillStyle='#06070a'; ctx.fillRect(0,0,TW,TH); el.appendChild(cv);
+      const tl=document.createElement('div'); tl.className='tl';
+      tl.innerHTML='<div class="nm">'+esc(f.name)+(f.kind==='transition'?'<span class="badge">遷移</span>':'')+'</div><div class="en">'+esc(f.en||'')+'</div>';
+      el.appendChild(tl);
+      el.addEventListener('click',()=>{ select(f.id); setMode('detail'); });
+      const t={fx:f,cv,ctx,el,visible:false}; el.__tile=t; tiles.push(t); grid.appendChild(el);
+      if(visObserver) visObserver.observe(el); else t.visible=true;
+    });
+    sec.appendChild(grid); galGridEl.appendChild(sec);
+  });
+  galCountEl.textContent=shown+' / '+EFFECTS.length+' 種';
+}
+
+let galTime=0, galLast=null, galRR=0;
+function upG(tex,cv){ glG.bindTexture(glG.TEXTURE_2D,tex); glG.pixelStorei(glG.UNPACK_FLIP_Y_WEBGL,true); glG.texImage2D(glG.TEXTURE_2D,0,glG.RGBA,glG.RGBA,glG.UNSIGNED_BYTE,cv); }
+function bindTexG(p,name,tex,unit){ const l=glG.getUniformLocation(p,name); if(l==null)return; glG.activeTexture(glG.TEXTURE0+unit); glG.bindTexture(glG.TEXTURE_2D,tex); glG.uniform1i(l,unit); }
+function ufG(p,name,cb){ const l=glG.getUniformLocation(p,name); if(l!=null) cb(l); }
+function renderTile(t,prog){ const fx=t.fx;
+  glG.viewport(0,0,TW,TH); glG.useProgram(prog);
+  const loc=glG.getAttribLocation(prog,'a_pos'); glG.bindBuffer(glG.ARRAY_BUFFER,quadG); glG.enableVertexAttribArray(loc); glG.vertexAttribPointer(loc,2,glG.FLOAT,false,0,0);
+  bindTexG(prog,'u_tex',gTexA,0); bindTexG(prog,'u_texB',gTexB,1); bindTexG(prog,'u_prev',gTexA,2);
+  ufG(prog,'u_res',l=>glG.uniform2f(l,TW,TH));
+  ufG(prog,'u_time',l=>glG.uniform1f(l,galTime));
+  const p01 = fx.kind==='transition' ? Math.min(1,((galTime/3.0)%1)*1.35) : ((galTime*0.12)%1);
+  ufG(prog,'u_progress',l=>glG.uniform1f(l,p01));
+  ufG(prog,'u_intensity',l=>glG.uniform1f(l,1));
+  (fx.params||[]).forEach(pr=>ufG(prog,pr.key,l=>glG.uniform1f(l,pr.default)));
+  glG.drawArrays(glG.TRIANGLES,0,3);
+  t.ctx.drawImage(galCanvas,0,0,TW,TH);
+}
+function galFrame(ts){
+  requestAnimationFrame(galFrame);
+  if(mode!=='gallery'||!glG){ galLast=ts; return; }
+  if(galLast==null) galLast=ts; const dt=Math.min((ts-galLast)/1000,0.05); galLast=ts; galTime+=dt;
+  GENERATORS.synthwave.fn(gax,galTime,SW,SH); upG(gTexA,gAcv);
+  GENERATORS.geo.fn(gbx,galTime,SW,SH); upG(gTexB,gBcv);
+  const vis=tiles.filter(t=>t.visible); if(!vis.length) return;
+  const drawBudget=Math.min(vis.length,44); let compiles=0; const compileMax=6;
+  for(let k=0;k<drawBudget;k++){ const t=vis[(galRR+k)%vis.length];
+    let e=progCacheG[t.fx.id];
+    if(!e){ if(compiles>=compileMax) continue; compiles++; e=getProgG(t.fx); }
+    if(!e.prog){ t.ctx.drawImage(gAcv,0,0,TW,TH); continue; }
+    renderTile(t,e.prog);
+  }
+  galRR=(galRR+drawBudget)%Math.max(vis.length,1);
+}
+galSearchEl.addEventListener('input',()=>buildGallery(galSearchEl.value));
+
+/* ===================== モード切替（一覧 ⇄ 詳細） ===================== */
+const appEl=document.querySelector('.app'), galEl=document.getElementById('gallery'), viewToggle=document.getElementById('viewToggle');
+function setMode(m){ mode=m;
+  appEl.classList.toggle('hidden', m!=='detail');
+  galEl.classList.toggle('hidden', m!=='gallery');
+  viewToggle.textContent = (m==='gallery') ? '◧ エディタを開く' : '▦ 一覧に戻る';
+  if(m==='detail'){ lastT=null; resize(); }
+}
+viewToggle.addEventListener('click',()=> setMode(mode==='gallery'?'detail':'gallery'));
+
 /* init */
 renderList('');
+buildGallery('');
 resize();
 if(EFFECTS.length){ select(EFFECTS[0].id); }
+setMode('gallery');
 requestAnimationFrame(frame);
+requestAnimationFrame(galFrame);
 </script>
 </body>
 </html>
