@@ -4,6 +4,21 @@
 
 公開: https://ryoma-lab.pages.dev
 
+## 作っている人 / 発信
+
+**中島 竜馬（Ryoma Nakajima）** — AIで有意義な暮らしを創る GTM エンジニア。
+動画編集・AI まわりのツールづくりや実験を、各 SNS で発信しています。
+
+[![X](https://img.shields.io/badge/X_(Twitter)-@ryoma__nakajima-000000?logo=x&logoColor=white)](https://x.com/ryoma_nakajima)
+[![Instagram](https://img.shields.io/badge/Instagram-@ryoma__nakajima-E4405F?logo=instagram&logoColor=white)](https://instagram.com/ryoma_nakajima)
+[![YouTube](https://img.shields.io/badge/YouTube-@ryoma__nakajima-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/@ryoma_nakajima)
+[![Website](https://img.shields.io/badge/Web-ryoma--n.com-6E7681?logo=googlechrome&logoColor=white)](https://ryoma-n.com)
+
+- 🌐 Web: <https://ryoma-n.com>
+- 𝕏 (Twitter): <https://x.com/ryoma_nakajima>
+- 📸 Instagram: <https://instagram.com/ryoma_nakajima>
+- ▶️ YouTube: <https://www.youtube.com/@ryoma_nakajima>
+
 ## 構成
 
 ```
