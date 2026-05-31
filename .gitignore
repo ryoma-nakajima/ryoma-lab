@@ -1,0 +1,8 @@
+# Cloudflare Wrangler のローカルキャッシュ（アカウントID・アカウント名などを含む）
+.wrangler/
+
+# macOS
+.DS_Store
+
+# 依存・ビルド
+node_modules/

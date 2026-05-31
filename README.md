@@ -8,9 +8,13 @@
 
 ```
 .
-├── index.html       # ホーム（ハブ）。各ツールへのリンク一覧
-└── telop/
-    └── index.html   # テロップアニメーション プリセット集（60+）
+├── index.html         # ホーム（ハブ）。各ツールへのリンク一覧
+├── telop/
+│   └── index.html     # テロップアニメーション プリセット集（60+）
+├── video-effects/
+│   └── index.html     # 映像エフェクト大全（5,500+ 種・5 系統の検索リファレンス）
+└── effects-playground/
+    └── index.html     # エフェクト・プレイグラウンド（288 種を WebGL 実装・スライダー調整）
 ```
 
 各ツールは `<tool>/index.html` の 1 ファイルで完結する。ホーム (`index.html`) のカードからリンクで開く。

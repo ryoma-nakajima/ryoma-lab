@@ -57,6 +57,30 @@ h1 .dim { color: var(--fg-faint); }
   color: var(--fg-dim);
   font-size: 16px;
 }
+.ghbtn {
+  margin-top: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.ghbtn:hover { background: var(--bg-card-hover); border-color: var(--border-hover); transform: translateY(-1px); }
+.ghbtn svg { flex-shrink: 0; }
+.ghbtn .repo {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--fg-faint);
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
 
 /* Grid */
 .grid {
@@ -132,7 +156,12 @@ footer a:hover { color: var(--accent); }
   <div class="wrap">
     <div class="eyebrow">RYOMA LAB</div>
     <h1>実験的 Web ツール<span class="dim">。</span></h1>
-    <p class="lead">単一 HTML で完結する小さな道具を、検証しながら少しずつ並べていく場所。気に入ったものはそのまま使えます。</p>
+    <p class="lead">単一 HTML で完結する小さな道具を、検証しながら少しずつ並べていく場所。気に入ったものはそのまま使えます。すべてのソースは GitHub で公開しています。</p>
+    <a class="ghbtn" href="https://github.com/ryoma-nakajima/ryoma-lab" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+      <span>GitHub でソースを見る</span>
+      <span class="repo">ryoma-nakajima/ryoma-lab</span>
+    </a>
   </div>
 </header>
 
@@ -153,8 +182,22 @@ footer a:hover { color: var(--accent); }
       <span class="go"><span>読む</span><span class="arrow">→</span></span>
     </a>
 
-    <div class="card soon">
+    <a class="card" href="./video-effects/">
       <div class="code">TOOL-02</div>
+      <h2>映像エフェクト大全</h2>
+      <p>Premiere / After Effects / DaVinci / CapCut ほか、世の中の動画編集ツールに実在する映像エフェクトを 5,500+ 種・5 系統で網羅した検索リファレンス。</p>
+      <span class="go"><span>開く</span><span class="arrow">→</span></span>
+    </a>
+
+    <a class="card" href="./effects-playground/">
+      <div class="code">TOOL-03</div>
+      <h2>エフェクト・プレイグラウンド</h2>
+      <p>映像エフェクト 288 種を WebGL でリアルタイム実装。スライダーで挙動を調整しながら、各エフェクトが実際にどう動くかを確認。自分の動画/画像をドロップして適用も可能。</p>
+      <span class="go"><span>開く</span><span class="arrow">→</span></span>
+    </a>
+
+    <div class="card soon">
+      <div class="code">TOOL-04</div>
       <h2>準備中</h2>
       <p>次のツールをここに追加予定。</p>
     </div>
